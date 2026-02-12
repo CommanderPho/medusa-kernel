@@ -1,0 +1,66 @@
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[project]
+name = "medusa-kernel"
+version = "1.4.3"
+description = "Advanced biosignal processing toolbox"
+readme = "README.md"
+license = { text = "CC Attribution-NonCommercial-NoDerivs 2.0" }
+requires-python = ">=3.10, <3.14"
+keywords = [
+    "Signal",
+    "Biosignal",
+    "EEG",
+    "BCI",
+]
+authors = [
+    { name = "Eduardo Santamaría-Vázquez", email = "support@medusabci.com" },
+    { name = "Víctor Martínez-Cagigal" },
+    { name = "Diego Marcos-Martínez" },
+    { name = "Víctor Rodríguez-González" },
+    { name = "Sergio Pérez-Velasco" },
+    {name = "Eduardo Santamaría-Vázquez, Víctor Martínez-Cagigal, Diego Marcos-Martínez, Víctor Rodríguez-González, Sergio Pérez-Velasco", email = "support@medusabci.com"},
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering",
+    "Programming Language :: Python",
+]
+
+dependencies = [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "scikit-learn",
+    "statsmodels",
+    "bson",
+    "h5py",
+    "dill",
+    "tqdm",
+    "PySide6",
+    "PyWavelets",
+    "setuptools>=82.0.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.urls]
+Homepage = "https://medusabci.com/"
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools.package-data]
+medusa = [
+    "meeg/*.tsv",
+    "signal_metrics/*.dll",
+    "analysis/time_plot/icons/*.png",
+    "analysis/time_plot/time_plot.ui",
+]
