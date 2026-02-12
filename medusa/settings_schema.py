@@ -1,10 +1,78 @@
 # Built-in imports
+import copy
 import sys
 # External imports
 from PySide6 import QtCore
 from PySide6.QtWidgets import *
 # Medusa imports
 from .components import SerializableComponent
+
+_GET_ITEM_VALUE_DEFAULT_SENTINEL = object()
+
+
+def merge_settings_with_defaults(default_serialized, loaded_serialized):
+    """Merge loaded settings tree into default schema. Default structure wins; loaded values override where path exists. Extra keys in loaded are ignored. Missing keys in loaded get default values. Returns (merged_serializable_tree, missing_paths, extra_paths) where paths are tuples of keys (e.g. ('x_axis', 'seconds_displayed'))."""
+    default = copy.deepcopy(default_serialized)
+    loaded = loaded_serialized if loaded_serialized is not None else []
+    missing_paths = []
+    extra_paths = []
+
+    def _find_by_key(items, key):
+        for it in (items or []):
+            if it.get('key') == key:
+                return it
+        return None
+
+    def merge_nodes(default_list, loaded_list, path_prefix=()):
+        if not isinstance(default_list, list):
+            return default_list, [], []
+        loaded_items = loaded_list if isinstance(loaded_list, list) else (loaded_list.get('items', []) if isinstance(loaded_list, dict) else [])
+        result = []
+        sub_missing = []
+        sub_extra = []
+        default_keys = {d.get('key') for d in default_list}
+        for l in loaded_items:
+            l_key = l.get('key')
+            if l_key not in default_keys:
+                sub_extra.append(path_prefix + (l_key,))
+        for d in default_list:
+            d_key = d.get('key')
+            current_path = path_prefix + (d_key,)
+            l = _find_by_key(loaded_items, d_key)
+            if l is None:
+                result.append(copy.deepcopy(d))
+                sub_missing.append(current_path)
+                continue
+            d_has_items = d.get('items') and len(d['items']) > 0
+            l_has_items = l.get('items') and len(l['items']) > 0
+            if d_has_items and l_has_items:
+                merged_child = copy.deepcopy(d)
+                merged_items, m2, e2 = merge_nodes(d['items'], l['items'], current_path)
+                merged_child['items'] = merged_items
+                sub_missing.extend(m2)
+                sub_extra.extend(e2)
+                result.append(merged_child)
+            elif d_has_items and not l_has_items:
+                result.append(copy.deepcopy(d))
+                sub_missing.append(current_path)
+            else:
+                merged_leaf = copy.deepcopy(d)
+                if 'value' in l:
+                    merged_leaf['value'] = l['value']
+                result.append(merged_leaf)
+        return result, sub_missing, sub_extra
+
+    if isinstance(default, list):
+        loaded_root = loaded if isinstance(loaded, list) else ([loaded] if isinstance(loaded, dict) else [])
+        merged, missing_paths, extra_paths = merge_nodes(default, loaded_root)
+        return merged, missing_paths, extra_paths
+    if isinstance(default, dict):
+        loaded_root = loaded.get('items', []) if isinstance(loaded, dict) else (loaded if isinstance(loaded, list) else [])
+        merged_items, missing_paths, extra_paths = merge_nodes(default.get('items', []), loaded_root)
+        result_root = copy.deepcopy(default)
+        result_root['items'] = merged_items
+        return result_root, missing_paths, extra_paths
+    return default, [], []
 
 
 class SettingsTree(SerializableComponent):
@@ -194,6 +262,21 @@ class SettingsTree(SerializableComponent):
             current_node = found
         return SettingsTree(current_node)
 
+    def get_item_optional(self, *keys):
+        """Same as get_item(*keys) but returns None instead of raising when a key is not found."""
+        current_node = self.tree
+        for key in keys:
+            found = None
+            items = current_node.get('items', []) if isinstance(current_node, dict) else current_node
+            for item in items:
+                if item.get('key') == key:
+                    found = item
+                    break
+            if found is None:
+                return None
+            current_node = found
+        return SettingsTree(current_node)
+
     def edit_item(self, value=None, info=None, input_format=None, value_range=None, value_options=None):
         """
         Edits the properties of the current item.
@@ -258,9 +341,16 @@ class SettingsTree(SerializableComponent):
         if parent_items is not None and index_to_delete is not None:
             del parent_items[index_to_delete]
 
-    def get_item_value(self, *keys):
-        item = self.get_item(*keys)
-        return item.to_serializable_obj()['value']
+    def get_item_value(self, *keys, default=_GET_ITEM_VALUE_DEFAULT_SENTINEL):
+        """Get value at path. If default is provided and path is missing, return default instead of raising."""
+        if default is _GET_ITEM_VALUE_DEFAULT_SENTINEL:
+            item = self.get_item(*keys)
+            return item.to_serializable_obj()['value']
+        st = self.get_item_optional(*keys)
+        if st is None:
+            return default
+        obj = st.to_serializable_obj()
+        return obj.get('value', default)
 
     def update_tree_from_widget(self, tree_widget: QTreeWidget):
         """Updates the tree with values from a QTreeWidget.
